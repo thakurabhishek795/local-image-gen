@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Local Image Generation Studio</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%20width=%22100%22%20height=%22100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+</head>
+<body>
+  <!-- Top Navigation Bar -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="logo">
+        <span class="logo-icon">⚡</span>
+        <div class="logo-text">
+          <h1>Local Diffusion Studio</h1>
+          <span class="subtitle">Self-Hosted &bull; Model-Agnostic &bull; Hardware-Aware</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div class="stat-pill" id="device-pill">
+        <span class="stat-dot" id="device-dot"></span>
+        <span id="device-text">Detecting hardware...</span>
+      </div>
+      <div class="stat-pill" id="vram-pill">
+        <span class="pill-label">VRAM:</span>
+        <span id="vram-text">-- / -- GB</span>
+      </div>
+      <div class="stat-pill" id="remote-pill" title="Accessible via Tailscale">
+        <span class="stat-icon">🌐</span>
+        <span id="remote-text">Tailscale Ready</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="studio-container">
+    <!-- Left Column: Controls & Generation Parameters -->
+    <section class="controls-panel">
+      <!-- Model Switcher Card -->
+      <div class="card model-card">
+        <div class="card-header">
+          <label for="model-select" class="section-title">Active Diffusion Model</label>
+          <span class="badge" id="model-tier-badge">Loading...</span>
+        </div>
+        <div class="model-select-wrapper">
+          <select id="model-select" class="custom-select">
+            <option value="" disabled selected>Loading models...</option>
+          </select>
+          <button id="switch-model-btn" class="btn btn-secondary btn-sm" title="Reload or Switch Model">
+            <span class="btn-text">Apply</span>
+          </button>
+        </div>
+        <p class="model-desc" id="model-description">Select a model to view hardware requirements.</p>
+      </div>
+
+      <!-- Prompts Section -->
+      <div class="card prompt-card">
+        <div class="form-group">
+          <div class="label-row">
+            <label for="prompt-input" class="section-title">Prompt</label>
+            <span class="char-count" id="prompt-count">0 chars</span>
+          </div>
+          <textarea id="prompt-input" class="custom-textarea" rows="3" placeholder="A futuristic cyberpunk city in neon rain, hyperrealistic, octane render, 8k resolution..."></textarea>
+        </div>
+
+        <div class="form-group" id="negative-prompt-group">
+          <div class="label-row">
+            <label for="negative-prompt-input" class="section-title">Negative Prompt</label>
+            <span class="info-tag" id="negative-prompt-tag">Avoids artifacts</span>
+          </div>
+          <textarea id="negative-prompt-input" class="custom-textarea" rows="2" placeholder="blurry, distorted, low quality, artifacts, watermark, deformed limbs, cropped"></textarea>
+        </div>
+      </div>
+
+      <!-- Settings & Sliders Section -->
+      <div class="card parameters-card">
+        <div class="card-header">
+          <span class="section-title">Generation Parameters</span>
+        </div>
+
+        <!-- Aspect Ratio & Resolution Preset Selector -->
+        <div class="form-group">
+          <label class="param-label">Aspect Ratio / Preset</label>
+          <div class="preset-pill-group" id="resolution-presets">
+            <!-- Dynamically populated based on active model -->
+          </div>
+          <div class="dimension-inputs">
+            <div class="dim-box">
+              <span>W:</span>
+              <input type="number" id="custom-width" value="512" min="128" max="2048" step="8">
+            </div>
+            <span class="dim-sep">&times;</span>
+            <div class="dim-box">
+              <span>H:</span>
+              <input type="number" id="custom-height" value="512" min="128" max="2048" step="8">
+            </div>
+          </div>
+        </div>
+
+        <!-- Inference Steps -->
+        <div class="form-group">
+          <div class="slider-header">
+            <label for="steps-slider" class="param-label">Inference Steps</label>
+            <span class="slider-value" id="steps-val">25</span>
+          </div>
+          <input type="range" id="steps-slider" min="1" max="100" value="25" class="custom-slider">
+          <div class="slider-hints">
+            <span id="steps-hint-low">1 (Turbo)</span>
+            <span id="steps-hint-mid">25 (Fast)</span>
+            <span id="steps-hint-high">50 (Detailed)</span>
+          </div>
+        </div>
+
+        <!-- Guidance Scale (CFG) -->
+        <div class="form-group">
+          <div class="slider-header">
+            <label for="guidance-slider" class="param-label">Guidance Scale (CFG)</label>
+            <span class="slider-value" id="guidance-val">7.5</span>
+          </div>
+          <input type="range" id="guidance-slider" min="0.0" max="20.0" step="0.5" value="7.5" class="custom-slider">
+          <div class="slider-hints">
+            <span>0.0 (Distilled/Flux)</span>
+            <span>7.0-8.0 (Standard)</span>
+            <span>15.0+ (Strict)</span>
+          </div>
+        </div>
+
+        <!-- Seed -->
+        <div class="form-group">
+          <div class="slider-header">
+            <label for="seed-input" class="param-label">Seed</label>
+            <button type="button" class="btn-text-action" id="randomize-seed-btn">🎲 Randomize (-1)</button>
+          </div>
+          <div class="seed-input-wrapper">
+            <input type="number" id="seed-input" value="-1" placeholder="-1 for random" class="custom-input">
+            <button type="button" class="btn-icon" id="dice-btn" title="Set to -1 (Random)">🎲</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Button & Status -->
+      <div class="action-section">
+        <button id="generate-btn" class="btn btn-primary btn-generate">
+          <span class="btn-icon-spin" id="generate-spinner" style="display: none;">⏳</span>
+          <span id="generate-btn-text">✨ Generate Image</span>
+        </button>
+        <div class="status-bar" id="status-bar">
+          <div class="status-indicator ready" id="status-dot"></div>
+          <span id="status-message">Ready</span>
+          <span id="timer-text" class="timer-text"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Column: Output Showcase & Gallery -->
+    <section class="display-panel">
+      <!-- Active Image Preview Card -->
+      <div class="card preview-card" id="preview-container">
+        <div class="preview-header">
+          <span class="preview-title">Generated Canvas</span>
+          <div class="preview-actions" id="preview-actions" style="display: none;">
+            <a id="download-btn" class="btn btn-secondary btn-sm" download="generated_image.png">
+              ⬇ Download PNG
+            </a>
+            <button id="copy-params-btn" class="btn btn-secondary btn-sm" title="Copy Generation Parameters">
+              📋 Copy Params
+            </button>
+          </div>
+        </div>
+
+        <div class="image-stage" id="image-stage">
+          <div class="placeholder-state" id="placeholder-state">
+            <div class="placeholder-icon">🎨</div>
+            <h3>Your generation will appear here</h3>
+            <p>Select a model, enter your prompt, and click <strong>Generate Image</strong>.</p>
+          </div>
+          <div class="loading-state" id="loading-state" style="display: none;">
+            <div class="spinner-ring"></div>
+            <h3 id="loading-title">Synthesizing Pixels...</h3>
+            <p id="loading-detail">Running denoising steps on backend</p>
+            <div class="elapsed-counter" id="elapsed-counter">0.0s</div>
+          </div>
+          <img id="main-preview-img" src="" alt="Generated artwork" style="display: none;">
+        </div>
+
+        <!-- Generation Metadata Strip -->
+        <div class="meta-strip" id="meta-strip" style="display: none;">
+          <div class="meta-item">
+            <span class="meta-label">Model:</span>
+            <span class="meta-val" id="meta-model">--</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Resolution:</span>
+            <span class="meta-val" id="meta-res">--</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Steps:</span>
+            <span class="meta-val" id="meta-steps">--</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">CFG:</span>
+            <span class="meta-val" id="meta-cfg">--</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Seed:</span>
+            <span class="meta-val" id="meta-seed">--</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Time:</span>
+            <span class="meta-val" id="meta-time">--</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gallery / History Strip -->
+      <div class="card gallery-card">
+        <div class="card-header">
+          <span class="section-title">Session Gallery</span>
+          <span class="badge" id="gallery-count">0 images</span>
+        </div>
+        <div class="gallery-grid" id="gallery-grid">
+          <!-- Thumbnail cards inserted here dynamically -->
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Notification Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>

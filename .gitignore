@@ -1,0 +1,39 @@
+# Environments
+.env
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Outputs & Generated Artifacts
+app/outputs/*.png
+app/outputs/*.jpg
+app/outputs/*.webp
+!app/outputs/.gitkeep
+
+# Hugging Face & Model Caches
+.cache/
+hf_cache/
+checkpoints/
+*.safetensors
+*.ckpt
+*.bin
+*.onnx
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# System & Editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
