@@ -45,6 +45,15 @@ class GenerateRequest(BaseModel):
     seed: Optional[int] = Field(default=-1, description="Random seed (-1 for random)")
 
 
+class GenerateVideoRequest(BaseModel):
+    image_filename: str = Field(..., description="Filename of source image in outputs folder")
+    num_frames: Optional[int] = Field(default=14, ge=8, le=30, description="Number of video frames (14 or 25)")
+    fps: Optional[int] = Field(default=7, ge=4, le=30, description="Frames per second")
+    motion_bucket_id: Optional[int] = Field(default=127, ge=1, le=255, description="Motion intensity (1-255)")
+    noise_aug_strength: Optional[float] = Field(default=0.02, ge=0.0, le=1.0, description="Noise augmentation amount")
+    seed: Optional[int] = Field(default=-1, description="Random seed")
+
+
 # -----------------------------------------------------------------------------
 # Application Lifespan
 # -----------------------------------------------------------------------------
@@ -227,26 +236,61 @@ async def generate_image(request: GenerateRequest):
         )
 
 
-@app.get("/api/v1/images")
-async def list_recent_images(limit: int = 24):
+@app.post("/api/v1/generate-video")
+async def generate_video(request: GenerateVideoRequest):
     """
-    Lists recently generated images stored in the output directory.
+    Animate a source image into an MP4 video using Stable Video Diffusion (SVD).
+    """
+    if engine.is_loading:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Model is currently loading/switching. Please retry shortly.",
+        )
+
+    try:
+        result = await engine.generate_video(
+            image_input=request.image_filename,
+            num_frames=request.num_frames or settings.SVD_DEFAULT_FRAMES,
+            fps=request.fps or settings.SVD_DEFAULT_FPS,
+            motion_bucket_id=request.motion_bucket_id or settings.SVD_DEFAULT_MOTION_BUCKET_ID,
+            noise_aug_strength=request.noise_aug_strength or settings.SVD_DEFAULT_NOISE_AUG,
+            seed=request.seed if request.seed is not None else -1,
+        )
+        return result
+    except FileNotFoundError as fnf:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(fnf))
+    except RuntimeError as r_err:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(r_err))
+    except Exception as ex:
+        logger.error(f"Video generation error: {ex}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Video animation failed: {str(ex)}",
+        )
+
+
+@app.get("/api/v1/images")
+async def list_recent_images(limit: int = 36):
+    """
+    Lists recently generated images and videos stored in the output directory.
     """
     output_dir = settings.OUTPUT_DIR
     if not output_dir.exists():
         return {"images": []}
 
     files = sorted(
-        output_dir.glob("*.png"),
+        [f for f in output_dir.iterdir() if f.suffix.lower() in (".png", ".jpg", ".webp", ".mp4")],
         key=lambda f: f.stat().st_mtime,
         reverse=True,
     )
 
     items = []
     for f in files[:limit]:
+        is_video = f.suffix.lower() == ".mp4"
         items.append({
             "filename": f.name,
             "url": f"/outputs/{f.name}",
+            "media_type": "video" if is_video else "image",
             "created_at": f.stat().st_mtime,
             "size_kb": round(f.stat().st_size / 1024, 1),
         })

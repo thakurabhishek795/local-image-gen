@@ -133,6 +133,13 @@ class Settings:
     # Optional Hugging Face Token for gated / private models
     HF_TOKEN: str = os.getenv("HF_TOKEN", "").strip() or None
 
+    # Video generation (Stable Video Diffusion)
+    SVD_REPO_ID: str = os.getenv("SVD_REPO_ID", "stabilityai/stable-video-diffusion-img2vid-xt")
+    SVD_DEFAULT_FRAMES: int = int(os.getenv("SVD_DEFAULT_FRAMES", "14"))
+    SVD_DEFAULT_FPS: int = int(os.getenv("SVD_DEFAULT_FPS", "7"))
+    SVD_DEFAULT_MOTION_BUCKET_ID: int = int(os.getenv("SVD_DEFAULT_MOTION_BUCKET_ID", "127"))
+    SVD_DEFAULT_NOISE_AUG: float = float(os.getenv("SVD_DEFAULT_NOISE_AUG", "0.02"))
+
 
 settings = Settings()
 settings.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

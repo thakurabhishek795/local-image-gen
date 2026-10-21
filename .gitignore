@@ -1,6 +1,8 @@
 # Environments
 .env
 venv/
+venv_gpu/
+venv*/
 .venv/
 env/
 ENV/
@@ -11,6 +13,7 @@ venv.bak/
 app/outputs/*.png
 app/outputs/*.jpg
 app/outputs/*.webp
+app/outputs/*.mp4
 !app/outputs/.gitkeep
 
 # Hugging Face & Model Caches

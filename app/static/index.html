@@ -18,6 +18,10 @@
           <span class="subtitle">Self-Hosted &bull; Model-Agnostic &bull; Hardware-Aware</span>
         </div>
       </div>
+      <nav class="mode-tabs">
+        <button type="button" class="mode-tab active" id="tab-image-mode">🎨 Image Studio</button>
+        <button type="button" class="mode-tab" id="tab-video-mode">🎬 Video Studio (SVD)</button>
+      </nav>
     </div>
 
     <div class="header-right">
@@ -156,6 +160,107 @@
       </div>
     </section>
 
+    <!-- Video Controls Panel (SVD Image-to-Video) -->
+    <section class="controls-panel" id="video-controls-panel" style="display: none;">
+      <!-- Video Model Info Card -->
+      <div class="card model-card">
+        <div class="card-header">
+          <span class="section-title">Video Generator Engine</span>
+          <span class="badge badge-accent">SVD-XT (Image-to-Video)</span>
+        </div>
+        <p class="model-desc">
+          <strong>Stable Video Diffusion XT</strong> &bull; Transforms any still image into a smooth, dynamic MP4 video with realistic 3D camera pan, motion, and lighting.
+        </p>
+      </div>
+
+      <!-- Selected Source Image Card -->
+      <div class="card source-image-card">
+        <div class="card-header">
+          <span class="section-title">Source Image</span>
+          <span class="badge" id="source-image-status">Active Canvas</span>
+        </div>
+        <div class="source-image-preview-box">
+          <img id="source-image-thumb" src="" alt="Source preview" style="display: none;">
+          <div id="no-source-image-msg" class="no-source-msg">
+            <span>📷 No image selected.</span>
+            <small>Generate an image or click any thumbnail in the gallery.</small>
+          </div>
+        </div>
+        <input type="hidden" id="selected-source-filename" value="">
+      </div>
+
+      <!-- Video Parameters Card -->
+      <div class="card parameters-card">
+        <div class="card-header">
+          <span class="section-title">Motion & Video Parameters</span>
+        </div>
+
+        <!-- Motion Bucket ID -->
+        <div class="form-group">
+          <div class="slider-header">
+            <label for="motion-slider" class="param-label">Motion Intensity (Bucket ID)</label>
+            <span class="slider-value" id="motion-val">127</span>
+          </div>
+          <input type="range" id="motion-slider" min="1" max="255" value="127" class="custom-slider">
+          <div class="slider-hints">
+            <span>1 (Subtle float)</span>
+            <span>127 (Natural pan)</span>
+            <span>255 (High energy)</span>
+          </div>
+        </div>
+
+        <!-- Frame Count Selector -->
+        <div class="form-group">
+          <label class="param-label">Video Length (Frames)</label>
+          <div class="preset-pill-group" id="video-frames-group">
+            <button type="button" class="preset-pill active" data-frames="14">14 Frames (~2 sec / Fast)</button>
+            <button type="button" class="preset-pill" data-frames="25">25 Frames (~3.5 sec / Extended)</button>
+          </div>
+        </div>
+
+        <!-- FPS Slider -->
+        <div class="form-group">
+          <div class="slider-header">
+            <label for="fps-slider" class="param-label">Playback Frame Rate (FPS)</label>
+            <span class="slider-value" id="fps-val">7</span>
+          </div>
+          <input type="range" id="fps-slider" min="4" max="16" value="7" class="custom-slider">
+          <div class="slider-hints">
+            <span>5 (Dreamy)</span>
+            <span>7 (Standard SVD)</span>
+            <span>12 (Smooth)</span>
+          </div>
+        </div>
+
+        <!-- Noise Augmentation Slider -->
+        <div class="form-group">
+          <div class="slider-header">
+            <label for="noise-aug-slider" class="param-label">Motion Noise Augmentation</label>
+            <span class="slider-value" id="noise-aug-val">0.02</span>
+          </div>
+          <input type="range" id="noise-aug-slider" min="0.00" max="0.10" step="0.01" value="0.02" class="custom-slider">
+          <div class="slider-hints">
+            <span>0.00 (Minimal)</span>
+            <span>0.02 (Optimal)</span>
+            <span>0.08 (Extreme)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Video Action Button -->
+      <div class="action-section">
+        <button id="generate-video-btn" class="btn btn-accent btn-generate">
+          <span class="btn-icon-spin" id="video-spinner" style="display: none;">⏳</span>
+          <span id="generate-video-btn-text">🎬 Animate Image to MP4</span>
+        </button>
+        <div class="status-bar" id="video-status-bar">
+          <div class="status-indicator ready" id="video-status-dot"></div>
+          <span id="video-status-message">Ready</span>
+          <span id="video-timer-text" class="timer-text"></span>
+        </div>
+      </div>
+    </section>
+
     <!-- Right Column: Output Showcase & Gallery -->
     <section class="display-panel">
       <!-- Active Image Preview Card -->
@@ -163,8 +268,14 @@
         <div class="preview-header">
           <span class="preview-title">Generated Canvas</span>
           <div class="preview-actions" id="preview-actions" style="display: none;">
+            <button type="button" id="animate-to-video-btn" class="btn btn-accent btn-sm" title="Animate into Video using SVD">
+              🎬 Animate into Video
+            </button>
             <a id="download-btn" class="btn btn-secondary btn-sm" download="generated_image.png">
               ⬇ Download PNG
+            </a>
+            <a id="download-video-btn" class="btn btn-secondary btn-sm" download="animated_video.mp4" style="display: none;">
+              ⬇ Download MP4
             </a>
             <button id="copy-params-btn" class="btn btn-secondary btn-sm" title="Copy Generation Parameters">
               📋 Copy Params
@@ -185,6 +296,7 @@
             <div class="elapsed-counter" id="elapsed-counter">0.0s</div>
           </div>
           <img id="main-preview-img" src="" alt="Generated artwork" style="display: none;">
+          <video id="main-preview-video" controls autoplay loop playsinline style="display: none;"></video>
         </div>
 
         <!-- Generation Metadata Strip -->

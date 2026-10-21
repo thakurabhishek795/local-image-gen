@@ -26,3 +26,5 @@ python-dotenv>=1.0.0
 # Hardware & System Utilities
 psutil>=5.9.0
 pillow>=10.0.0
+imageio>=2.34.0
+imageio-ffmpeg>=0.5.1

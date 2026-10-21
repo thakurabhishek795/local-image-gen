@@ -50,6 +50,7 @@ Image-generator/
 | `sdxl_turbo` | SDXL Turbo | SDXL | 6 GB | 8 GB | 512×512 | 1–4 | 0.0 | Near-instant real-time generation, distilled weights |
 | `sdxl` | SDXL Base 1.0 | SDXL | 8 GB | 12 GB | 1024×1024 | 30 | 7.0 | High-fidelity 1024px art, photorealism, detailed texturing |
 | `flux_schnell` | FLUX.1 [schnell] | FLUX | 12 GB | 16 GB | 1024×1024 | 4 | 0.0 | Next-generation 12B rectified flow, exceptional text rendering |
+| `svd_xt` | Stable Video Diffusion XT | SVD (Video) | 8 GB | 10 GB | 1024×576 | 14–25 frames | N/A | High-motion Image-to-Video animation producing playable `.mp4` |
 
 ---
 
@@ -227,8 +228,22 @@ curl -X POST http://localhost:7860/api/v1/generate \
   }'
 ```
 
-### 5. `GET /api/v1/images`
-Returns a list of recently generated output files with metadata.
+### 5. `POST /api/v1/generate-video`
+Animates a source image into an MP4 video using Stable Video Diffusion (SVD).
+```bash
+curl -X POST http://localhost:7860/api/v1/generate-video \
+  -H "Content-Type: application/json" \
+  -d '{
+    "image_filename": "20261022_033230_sd15_354b9908.png",
+    "num_frames": 14,
+    "fps": 7,
+    "motion_bucket_id": 127,
+    "noise_aug_strength": 0.02
+  }'
+```
+
+### 6. `GET /api/v1/images`
+Returns a list of recently generated output files (both images and MP4 videos) with metadata.
 
 ---
 

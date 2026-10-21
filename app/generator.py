@@ -30,6 +30,7 @@ class ModelManager:
     def __init__(self):
         self.current_model_key: Optional[str] = None
         self.pipeline: Any = None
+        self.video_pipeline: Any = None
         self.device: str = "cpu"
         self.dtype: torch.dtype = torch.float32
         self.lock = asyncio.Lock()
@@ -46,10 +47,9 @@ class ModelManager:
         }
 
     def unload(self):
-        """Unload active pipeline and reclaim host RAM and device VRAM."""
+        """Unload active image and video pipelines and reclaim host RAM and device VRAM."""
         if self.pipeline is not None:
             logger.info(f"Unloading active model: {self.current_model_key}")
-            # Safely release hooks if offloaded
             try:
                 if hasattr(self.pipeline, "remove_all_hooks"):
                     self.pipeline.remove_all_hooks()
@@ -59,9 +59,20 @@ class ModelManager:
             del self.pipeline
             self.pipeline = None
 
+        if self.video_pipeline is not None:
+            logger.info("Unloading active video pipeline")
+            try:
+                if hasattr(self.video_pipeline, "remove_all_hooks"):
+                    self.video_pipeline.remove_all_hooks()
+            except Exception as e:
+                logger.debug(f"Error removing video pipeline hooks: {e}")
+
+            del self.video_pipeline
+            self.video_pipeline = None
+
         self.current_model_key = None
         clear_memory(self.device)
-        logger.info("Pipeline unloaded and memory cleared.")
+        logger.info("Pipelines unloaded and memory cleared.")
 
     def _determine_offload_strategy(self, device: str) -> str:
         """Determines whether to apply CPU offloading based on configuration and VRAM."""
@@ -312,6 +323,160 @@ class ModelManager:
                 height,
                 num_inference_steps,
                 guidance_scale,
+                seed,
+            )
+
+    def load_video_pipeline(self):
+        """Loads Stable Video Diffusion (SVD) with memory offloading."""
+        if self.video_pipeline is not None:
+            return
+
+        self.is_loading = True
+        try:
+            # Unload image model to free VRAM for video generation
+            self.unload()
+
+            self.device = detect_device(settings.DEVICE)
+            svd_dtype = torch.float16 if self.device in ("cuda", "mps") else torch.float32
+
+            logger.info(f"Loading SVD Video Pipeline: {settings.SVD_REPO_ID} on {self.device} ({svd_dtype})")
+            from diffusers import StableVideoDiffusionPipeline
+
+            pipeline_kwargs: Dict[str, Any] = {
+                "torch_dtype": svd_dtype,
+            }
+            if self.device == "cuda":
+                pipeline_kwargs["variant"] = "fp16"
+            if settings.HF_TOKEN:
+                pipeline_kwargs["token"] = settings.HF_TOKEN
+
+            self.video_pipeline = StableVideoDiffusionPipeline.from_pretrained(
+                settings.SVD_REPO_ID,
+                **pipeline_kwargs
+            )
+
+            # Apply CPU offload for optimal VRAM usage on 8GB GPUs
+            if hasattr(self.video_pipeline, "enable_model_cpu_offload"):
+                logger.info("Enabling model CPU offload for SVD video generation...")
+                self.video_pipeline.enable_model_cpu_offload()
+            else:
+                self.video_pipeline.to(self.device)
+
+            if hasattr(self.video_pipeline, "enable_vae_slicing"):
+                self.video_pipeline.enable_vae_slicing()
+            if hasattr(self.video_pipeline, "enable_vae_tiling"):
+                self.video_pipeline.enable_vae_tiling()
+
+            logger.info("Stable Video Diffusion pipeline loaded successfully.")
+        except Exception as e:
+            logger.error(f"Failed to load SVD video pipeline: {e}", exc_info=True)
+            self.unload()
+            raise e
+        finally:
+            self.is_loading = False
+
+    def _sync_generate_video(
+        self,
+        image_input: Any,
+        num_frames: int = 14,
+        fps: int = 7,
+        motion_bucket_id: int = 127,
+        noise_aug_strength: float = 0.02,
+        seed: int = -1,
+    ) -> Dict[str, Any]:
+        """Synchronous video generation executed in thread pool."""
+        self.load_video_pipeline()
+
+        from diffusers.utils import export_to_video
+
+        # Load image if filepath or filename provided
+        if isinstance(image_input, (str, Path)):
+            input_path = Path(image_input)
+            if not input_path.is_absolute():
+                input_path = settings.OUTPUT_DIR / input_path.name
+            if not input_path.exists():
+                raise FileNotFoundError(f"Source image not found: {input_path}")
+            image = Image.open(input_path).convert("RGB")
+        elif isinstance(image_input, Image.Image):
+            image = image_input.convert("RGB")
+        else:
+            raise ValueError("Invalid image input for video generation")
+
+        # Resize image for SVD (multiples of 64, standard 1024x576 or 576x1024)
+        orig_w, orig_h = image.size
+        if orig_w >= orig_h:
+            target_w, target_h = 1024, 576
+        else:
+            target_w, target_h = 576, 1024
+        image = image.resize((target_w, target_h), Image.Resampling.LANCZOS)
+
+        if seed < 0:
+            seed = random.randint(0, 2**32 - 1)
+
+        gen_device = "cpu" if self.device in ("mps", "cpu") else "cuda"
+        generator = torch.Generator(device=gen_device).manual_seed(seed)
+
+        start_time = time.perf_counter()
+        logger.info(f"Generating video: {num_frames} frames @ {fps}fps | Motion: {motion_bucket_id} | Seed: {seed}")
+
+        try:
+            # decode_chunk_size=4 prevents VRAM spikes during decoding
+            frames = self.video_pipeline(
+                image,
+                num_frames=num_frames,
+                decode_chunk_size=4,
+                motion_bucket_id=motion_bucket_id,
+                noise_aug_strength=noise_aug_strength,
+                generator=generator,
+            ).frames[0]
+
+            elapsed_seconds = round(time.perf_counter() - start_time, 2)
+
+            timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+            short_id = uuid.uuid4().hex[:8]
+            filename = f"{timestamp_str}_svd_{short_id}.mp4"
+            file_path = settings.OUTPUT_DIR / filename
+
+            export_to_video(frames, str(file_path), fps=fps)
+
+            return {
+                "status": "success",
+                "filename": filename,
+                "video_url": f"/outputs/{filename}",
+                "num_frames": num_frames,
+                "fps": fps,
+                "motion_bucket_id": motion_bucket_id,
+                "seed": seed,
+                "generation_time_seconds": elapsed_seconds,
+                "created_at": datetime.now().isoformat(),
+            }
+        except torch.cuda.OutOfMemoryError as oom:
+            clear_memory(self.device)
+            raise RuntimeError(f"GPU OOM during video generation: {oom}") from oom
+        except Exception as e:
+            clear_memory(self.device)
+            raise e
+
+    async def generate_video(
+        self,
+        image_input: Any,
+        num_frames: int = 14,
+        fps: int = 7,
+        motion_bucket_id: int = 127,
+        noise_aug_strength: float = 0.02,
+        seed: int = -1,
+    ) -> Dict[str, Any]:
+        """Async mutex-guarded video generation entrypoint."""
+        async with self.lock:
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(
+                None,
+                self._sync_generate_video,
+                image_input,
+                num_frames,
+                fps,
+                motion_bucket_id,
+                noise_aug_strength,
                 seed,
             )
 
