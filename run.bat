@@ -12,14 +12,17 @@ if not exist ".env" (
 )
 
 :: Activate virtual environment if present
-if exist "venv\Scripts\activate.bat" (
+if exist "venv_gpu\Scripts\activate.bat" (
+    echo Activating GPU virtual environment (venv_gpu)...
+    call venv_gpu\Scripts\activate.bat
+) else if exist "venv\Scripts\activate.bat" (
     echo Activating virtual environment (venv)...
     call venv\Scripts\activate.bat
 ) else if exist ".venv\Scripts\activate.bat" (
     echo Activating virtual environment (.venv)...
     call .venv\Scripts\activate.bat
 ) else (
-    echo [Notice] No virtual environment detected in venv\ or .venv\.
+    echo [Notice] No virtual environment detected in venv_gpu\, venv\ or .venv\.
     echo Running with system Python interpreter...
 )
 

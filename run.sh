@@ -15,7 +15,10 @@ if [ ! -f ".env" ]; then
 fi
 
 # Activate virtual environment if present
-if [ -d "venv" ]; then
+if [ -d "venv_gpu" ]; then
+    echo "Activating GPU virtual environment (venv_gpu)..."
+    source venv_gpu/bin/activate
+elif [ -d "venv" ]; then
     echo "Activating virtual environment (venv)..."
     source venv/bin/activate
 elif [ -d ".venv" ]; then
