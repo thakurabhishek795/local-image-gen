@@ -425,10 +425,10 @@ class ModelManager:
             target_h = 448 if is_landscape else 768
             chunk_size = 2
         else:
-            # 14 frames mode: full 1024x576 HD
+            # 14 frames mode: full 1024x576 HD (chunk_size=2 ensures VAE activations stay under 7.5GB)
             target_w = 1024 if is_landscape else 576
             target_h = 576 if is_landscape else 1024
-            chunk_size = 4
+            chunk_size = 2
 
         image = image.resize((target_w, target_h), Image.Resampling.LANCZOS)
 
