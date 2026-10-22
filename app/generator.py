@@ -402,12 +402,22 @@ class ModelManager:
         else:
             raise ValueError("Invalid image input for video generation")
 
-        # Resize image for SVD (multiples of 64, standard 1024x576 or 576x1024)
+        # Adaptive resolution scaling for 8GB VRAM cards
+        # 14 frames fits at 1024x576; 25 frames requires 768x448 to prevent Shared RAM spilling
         orig_w, orig_h = image.size
-        if orig_w >= orig_h:
-            target_w, target_h = 1024, 576
+        is_landscape = orig_w >= orig_h
+
+        if num_frames > 14:
+            # 25 frames mode: 768x448 maintains aspect ratio and fits inside 8GB VRAM
+            target_w = 768 if is_landscape else 448
+            target_h = 448 if is_landscape else 768
+            chunk_size = 2
         else:
-            target_w, target_h = 576, 1024
+            # 14 frames mode: full 1024x576 HD
+            target_w = 1024 if is_landscape else 576
+            target_h = 576 if is_landscape else 1024
+            chunk_size = 4
+
         image = image.resize((target_w, target_h), Image.Resampling.LANCZOS)
 
         if seed < 0:
@@ -417,14 +427,16 @@ class ModelManager:
         generator = torch.Generator(device=gen_device).manual_seed(seed)
 
         start_time = time.perf_counter()
-        logger.info(f"Generating video: {num_frames} frames @ {fps}fps | Motion: {motion_bucket_id} | Seed: {seed}")
+        logger.info(
+            f"Generating video: {num_frames} frames ({target_w}x{target_h}) @ {fps}fps | "
+            f"Motion: {motion_bucket_id} | Seed: {seed}"
+        )
 
         try:
-            # decode_chunk_size=4 prevents VRAM spikes during decoding
             frames = self.video_pipeline(
                 image,
                 num_frames=num_frames,
-                decode_chunk_size=4,
+                decode_chunk_size=chunk_size,
                 motion_bucket_id=motion_bucket_id,
                 noise_aug_strength=noise_aug_strength,
                 generator=generator,
