@@ -11,21 +11,21 @@ if not exist ".env" (
     copy .env.example .env >nul
 )
 
-:: Activate virtual environment if present
-if exist "venv_gpu\Scripts\activate.bat" (
-    echo Activating GPU virtual environment (venv_gpu)...
-    call venv_gpu\Scripts\activate.bat
-) else if exist "venv\Scripts\activate.bat" (
-    echo Activating virtual environment (venv)...
-    call venv\Scripts\activate.bat
-) else if exist ".venv\Scripts\activate.bat" (
-    echo Activating virtual environment (.venv)...
-    call .venv\Scripts\activate.bat
+:: Select Python interpreter
+if exist "venv_gpu\Scripts\python.exe" (
+    echo Using GPU virtual environment: venv_gpu
+    set "PYTHON_EXE=venv_gpu\Scripts\python.exe"
+) else if exist "venv\Scripts\python.exe" (
+    echo Using virtual environment: venv
+    set "PYTHON_EXE=venv\Scripts\python.exe"
+) else if exist ".venv\Scripts\python.exe" (
+    echo Using virtual environment: .venv
+    set "PYTHON_EXE=.venv\Scripts\python.exe"
 ) else (
-    echo [Notice] No virtual environment detected in venv_gpu\, venv\ or .venv\.
-    echo Running with system Python interpreter...
+    echo Using system Python interpreter
+    set "PYTHON_EXE=python"
 )
 
 :: Launch the FastAPI service
-python -m app.main %*
+"%PYTHON_EXE%" -m app.main %*
 pause
