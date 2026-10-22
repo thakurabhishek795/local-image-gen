@@ -50,6 +50,7 @@ Image-generator/
 | `sdxl_turbo` | SDXL Turbo | SDXL | 6 GB | 8 GB | 512×512 | 1–4 | 0.0 | Near-instant real-time generation, distilled weights |
 | `sdxl` | SDXL Base 1.0 | SDXL | 8 GB | 12 GB | 1024×1024 | 30 | 7.0 | High-fidelity 1024px art, photorealism, detailed texturing |
 | `flux_schnell` | FLUX.1 [schnell] | FLUX | 12 GB | 16 GB | 1024×1024 | 4 | 0.0 | Next-generation 12B rectified flow, exceptional text rendering |
+| `animatediff` | AnimateDiff v1.5-2 | AnimateDiff | 6 GB | 8 GB | 512×512 | 16 frames @ 8fps | 7.5 | **100% Native fast video** from text prompt (~15s on RTX 4070) |
 | `svd_xt` | Stable Video Diffusion XT | SVD (Video) | 8 GB | 10 GB | 1024×576 | 14–25 frames | N/A | High-motion Image-to-Video animation producing playable `.mp4` |
 
 ---
@@ -228,7 +229,23 @@ curl -X POST http://localhost:7860/api/v1/generate \
   }'
 ```
 
-### 5. `POST /api/v1/generate-video`
+### 5. `POST /api/v1/generate-animatediff`
+Generates a fast native animation from text prompt using AnimateDiff motion adapter (~12-18s on RTX 4070).
+```bash
+curl -X POST http://localhost:7860/api/v1/generate-animatediff \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "An astronaut walking on Mars, cosmic dust, cinematic, realistic, 8k",
+    "negative_prompt": "blurry, low quality, artifacts",
+    "num_frames": 16,
+    "fps": 8,
+    "num_inference_steps": 25,
+    "guidance_scale": 7.5,
+    "seed": 42
+  }'
+```
+
+### 6. `POST /api/v1/generate-video`
 Animates a source image into an MP4 video using Stable Video Diffusion (SVD).
 ```bash
 curl -X POST http://localhost:7860/api/v1/generate-video \
@@ -242,10 +259,10 @@ curl -X POST http://localhost:7860/api/v1/generate-video \
   }'
 ```
 
-### 6. `GET /api/v1/network`
+### 7. `GET /api/v1/network`
 Returns detected Tailscale IP, LAN Wi-Fi IP, and direct connection URLs for mobile pairing.
 
-### 7. `GET /api/v1/images`
+### 8. `GET /api/v1/images`
 Returns a list of recently generated output files (both images and MP4 videos) with metadata.
 
 ---
@@ -254,6 +271,7 @@ Returns a list of recently generated output files (both images and MP4 videos) w
 
 The repository includes tools to turn your computer into a **24/7 dedicated background server**:
 
+* **`set_laptop_server_power.bat`**: Configures Windows power plan to never sleep while plugged into AC power and to keep running with the laptop lid closed (clamshell server mode).
 * **`open_firewall.bat`**: One-click script (auto-elevates to Administrator) to add an Inbound Rule in Windows Defender Firewall for TCP Port 7860.
 * **`start_server_background.vbs`**: Silent launcher that starts the FastAPI image generation service in the background **without keeping a visible console window open**.
 * **`stop_server.bat`**: Gracefully terminates any background server process running on port 7860.

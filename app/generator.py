@@ -31,6 +31,7 @@ class ModelManager:
         self.current_model_key: Optional[str] = None
         self.pipeline: Any = None
         self.video_pipeline: Any = None
+        self.animatediff_pipeline: Any = None
         self.device: str = "cpu"
         self.dtype: torch.dtype = torch.float32
         self.lock = asyncio.Lock()
@@ -69,6 +70,17 @@ class ModelManager:
 
             del self.video_pipeline
             self.video_pipeline = None
+
+        if self.animatediff_pipeline is not None:
+            logger.info("Unloading active AnimateDiff pipeline")
+            try:
+                if hasattr(self.animatediff_pipeline, "remove_all_hooks"):
+                    self.animatediff_pipeline.remove_all_hooks()
+            except Exception as e:
+                logger.debug(f"Error removing AnimateDiff hooks: {e}")
+
+            del self.animatediff_pipeline
+            self.animatediff_pipeline = None
 
         self.current_model_key = None
         clear_memory(self.device)
@@ -489,6 +501,150 @@ class ModelManager:
                 fps,
                 motion_bucket_id,
                 noise_aug_strength,
+                seed,
+            )
+
+    def load_animatediff_pipeline(self):
+        """Loads AnimateDiff 100% Native on GPU for fast 15-second video synthesis."""
+        if self.animatediff_pipeline is not None:
+            return
+
+        self.is_loading = True
+        try:
+            self.unload()
+
+            self.device = detect_device(settings.DEVICE)
+            pipe_dtype = torch.float16 if self.device in ("cuda", "mps") else torch.float32
+
+            logger.info(f"Loading AnimateDiff (100% Native GPU) on {self.device} ({pipe_dtype})...")
+            from diffusers import AnimateDiffPipeline, MotionAdapter, DDIMScheduler
+
+            adapter_kwargs: Dict[str, Any] = {"torch_dtype": pipe_dtype}
+            pipeline_kwargs: Dict[str, Any] = {"torch_dtype": pipe_dtype}
+            if settings.HF_TOKEN:
+                adapter_kwargs["token"] = settings.HF_TOKEN
+                pipeline_kwargs["token"] = settings.HF_TOKEN
+
+            adapter = MotionAdapter.from_pretrained(settings.ANIMATEDIFF_ADAPTER_ID, **adapter_kwargs)
+            self.animatediff_pipeline = AnimateDiffPipeline.from_pretrained(
+                settings.ANIMATEDIFF_BASE_MODEL_ID,
+                motion_adapter=adapter,
+                **pipeline_kwargs
+            )
+
+            # DDIM scheduler yields crisp motion in 20-25 steps
+            self.animatediff_pipeline.scheduler = DDIMScheduler.from_config(
+                self.animatediff_pipeline.scheduler.config,
+                beta_schedule="linear",
+                clip_sample=False,
+                timestep_spacing="linspace",
+                steps_offset=1,
+            )
+
+            # AnimateDiff fits 100% inside 8GB VRAM (~5.8GB peak), place directly on GPU!
+            logger.info("Placing AnimateDiff directly on GPU (no CPU offload)...")
+            self.animatediff_pipeline.to(self.device)
+
+            if hasattr(self.animatediff_pipeline, "enable_vae_slicing"):
+                self.animatediff_pipeline.enable_vae_slicing()
+
+            logger.info("AnimateDiff loaded successfully (100% Native VRAM).")
+        except Exception as e:
+            logger.error(f"Failed to load AnimateDiff pipeline: {e}", exc_info=True)
+            self.unload()
+            raise e
+        finally:
+            self.is_loading = False
+
+    def _sync_generate_animatediff(
+        self,
+        prompt: str,
+        negative_prompt: Optional[str] = None,
+        num_frames: int = 16,
+        fps: int = 8,
+        num_inference_steps: int = 25,
+        guidance_scale: float = 7.5,
+        seed: int = -1,
+    ) -> Dict[str, Any]:
+        """Synchronous AnimateDiff generation (runs in ~12-18 seconds on RTX 4070)."""
+        self.load_animatediff_pipeline()
+
+        from diffusers.utils import export_to_video
+
+        if seed < 0:
+            seed = random.randint(0, 2**32 - 1)
+
+        gen_device = "cpu" if self.device in ("mps", "cpu") else "cuda"
+        generator = torch.Generator(device=gen_device).manual_seed(seed)
+
+        start_time = time.perf_counter()
+        logger.info(
+            f"Generating AnimateDiff video: {num_frames} frames @ {fps}fps | "
+            f"Steps: {num_inference_steps} | Seed: {seed}"
+        )
+
+        try:
+            output = self.animatediff_pipeline(
+                prompt=prompt,
+                negative_prompt=negative_prompt or "bad quality, blurry, distorted, low quality, artifacts",
+                num_frames=num_frames,
+                guidance_scale=guidance_scale,
+                num_inference_steps=num_inference_steps,
+                generator=generator,
+            )
+            frames = output.frames[0]
+            elapsed_seconds = round(time.perf_counter() - start_time, 2)
+
+            timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+            short_id = uuid.uuid4().hex[:8]
+            filename = f"{timestamp_str}_animatediff_{short_id}.mp4"
+            file_path = settings.OUTPUT_DIR / filename
+
+            export_to_video(frames, str(file_path), fps=fps)
+
+            return {
+                "status": "success",
+                "filename": filename,
+                "video_url": f"/outputs/{filename}",
+                "engine": "animatediff",
+                "prompt": prompt,
+                "num_frames": num_frames,
+                "fps": fps,
+                "num_inference_steps": num_inference_steps,
+                "guidance_scale": guidance_scale,
+                "seed": seed,
+                "generation_time_seconds": elapsed_seconds,
+                "created_at": datetime.now().isoformat(),
+            }
+        except torch.cuda.OutOfMemoryError as oom:
+            clear_memory(self.device)
+            raise RuntimeError(f"GPU OOM during AnimateDiff generation: {oom}") from oom
+        except Exception as e:
+            clear_memory(self.device)
+            raise e
+
+    async def generate_animatediff(
+        self,
+        prompt: str,
+        negative_prompt: Optional[str] = None,
+        num_frames: int = 16,
+        fps: int = 8,
+        num_inference_steps: int = 25,
+        guidance_scale: float = 7.5,
+        seed: int = -1,
+    ) -> Dict[str, Any]:
+        """Async entrypoint for AnimateDiff generation, guarded by mutex lock."""
+        async with self.lock:
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(
+                None,
+                self._sync_generate_animatediff,
+                prompt,
+                negative_prompt,
+                num_frames,
+                fps,
+                num_inference_steps,
+                guidance_scale,
                 seed,
             )
 

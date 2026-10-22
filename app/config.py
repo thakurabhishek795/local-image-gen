@@ -140,6 +140,12 @@ class Settings:
     SVD_DEFAULT_MOTION_BUCKET_ID: int = int(os.getenv("SVD_DEFAULT_MOTION_BUCKET_ID", "127"))
     SVD_DEFAULT_NOISE_AUG: float = float(os.getenv("SVD_DEFAULT_NOISE_AUG", "0.02"))
 
+    # AnimateDiff Video Generation (Fast 100% Native Text-to-Video)
+    ANIMATEDIFF_ADAPTER_ID: str = os.getenv("ANIMATEDIFF_ADAPTER_ID", "guoyww/animatediff-motion-adapter-v1-5-2")
+    ANIMATEDIFF_BASE_MODEL_ID: str = os.getenv("ANIMATEDIFF_BASE_MODEL_ID", "runwayml/stable-diffusion-v1-5")
+    ANIMATEDIFF_DEFAULT_FRAMES: int = int(os.getenv("ANIMATEDIFF_DEFAULT_FRAMES", "16"))
+    ANIMATEDIFF_DEFAULT_FPS: int = int(os.getenv("ANIMATEDIFF_DEFAULT_FPS", "8"))
+
 
 settings = Settings()
 settings.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

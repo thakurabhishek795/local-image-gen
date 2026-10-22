@@ -55,6 +55,16 @@ class GenerateVideoRequest(BaseModel):
     seed: Optional[int] = Field(default=-1, description="Random seed")
 
 
+class GenerateAnimateDiffRequest(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=2000, description="Text prompt for animation")
+    negative_prompt: Optional[str] = Field(default="", max_length=2000, description="Negative prompt")
+    num_frames: Optional[int] = Field(default=16, ge=8, le=32, description="Number of animation frames")
+    fps: Optional[int] = Field(default=8, ge=4, le=30, description="Frames per second")
+    num_inference_steps: Optional[int] = Field(default=25, ge=10, le=50, description="Denoising steps")
+    guidance_scale: Optional[float] = Field(default=7.5, ge=1.0, le=20.0, description="CFG scale")
+    seed: Optional[int] = Field(default=-1, description="Random seed")
+
+
 # -----------------------------------------------------------------------------
 # Application Lifespan
 # -----------------------------------------------------------------------------
@@ -314,6 +324,39 @@ async def generate_video(request: GenerateVideoRequest):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Video animation failed: {str(ex)}",
+        )
+
+
+@app.post("/api/v1/generate-animatediff")
+async def generate_animatediff(request: GenerateAnimateDiffRequest):
+    """
+    Generates an animated video clip from text prompt using AnimateDiff (100% Native on GPU).
+    Runs in ~12 to 18 seconds on RTX 4070.
+    """
+    if engine.is_loading:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Model is currently loading/switching. Please retry shortly.",
+        )
+
+    try:
+        result = await engine.generate_animatediff(
+            prompt=request.prompt,
+            negative_prompt=request.negative_prompt,
+            num_frames=request.num_frames or settings.ANIMATEDIFF_DEFAULT_FRAMES,
+            fps=request.fps or settings.ANIMATEDIFF_DEFAULT_FPS,
+            num_inference_steps=request.num_inference_steps or 25,
+            guidance_scale=request.guidance_scale if request.guidance_scale is not None else 7.5,
+            seed=request.seed if request.seed is not None else -1,
+        )
+        return result
+    except RuntimeError as r_err:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(r_err))
+    except Exception as ex:
+        logger.error(f"AnimateDiff generation error: {ex}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"AnimateDiff animation failed: {str(ex)}",
         )
 
 

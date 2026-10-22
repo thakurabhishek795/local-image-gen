@@ -14,6 +14,7 @@ let elapsedTimerInterval = null;
 let videoTimerInterval = null;
 let lastGenerationData = null;
 let currentMode = "image"; // "image" | "video"
+let activeVideoEngine = "animatediff"; // "animatediff" | "svd"
 let selectedVideoFrames = 14;
 let activeSourceImageFilename = null;
 let activeSourceImageUrl = null;
@@ -66,7 +67,22 @@ const elements = {
   statusMessage: document.getElementById("status-message"),
   timerText: document.getElementById("timer-text"),
 
-  // Video Inputs & Controls
+  // Video Engine Switcher & AnimateDiff Controls
+  btnEngineAnimateDiff: document.getElementById("btn-engine-animatediff"),
+  btnEngineSvd: document.getElementById("btn-engine-svd"),
+  videoEngineBadge: document.getElementById("video-engine-badge"),
+  videoEngineDesc: document.getElementById("video-engine-desc"),
+  animatediffInputsCard: document.getElementById("animatediff-inputs-card"),
+  svdInputsContainer: document.getElementById("svd-inputs-container"),
+  adPromptInput: document.getElementById("ad-prompt-input"),
+  adPromptCount: document.getElementById("ad-prompt-count"),
+  adNegPromptInput: document.getElementById("ad-neg-prompt-input"),
+  adStepsSlider: document.getElementById("ad-steps-slider"),
+  adStepsVal: document.getElementById("ad-steps-val"),
+  adGuidanceSlider: document.getElementById("ad-guidance-slider"),
+  adGuidanceVal: document.getElementById("ad-guidance-val"),
+
+  // Video Inputs & Controls (SVD)
   sourceImageThumb: document.getElementById("source-image-thumb"),
   noSourceImageMsg: document.getElementById("no-source-image-msg"),
   selectedSourceFilename: document.getElementById("selected-source-filename"),
@@ -201,11 +217,37 @@ function setupEventListeners() {
     if (activeSourceImageFilename) {
       setVideoSource(activeSourceImageFilename, activeSourceImageUrl);
       switchMode("video");
-      showToast("Source image loaded into Video Studio! Adjust motion and click Animate.", "info");
+      setVideoEngine("svd");
+      showToast("Source image loaded into SVD Video Studio! Adjust motion and click Animate.", "info");
     } else {
       showToast("Please generate or select an image first.", "error");
     }
   });
+
+  // AnimateDiff prompt counter
+  if (elements.adPromptInput) {
+    elements.adPromptInput.addEventListener("input", () => {
+      elements.adPromptCount.textContent = `${elements.adPromptInput.value.length} chars`;
+    });
+  }
+
+  // AnimateDiff sliders
+  if (elements.adStepsSlider) {
+    elements.adStepsSlider.addEventListener("input", (e) => {
+      elements.adStepsVal.textContent = e.target.value;
+    });
+  }
+  if (elements.adGuidanceSlider) {
+    elements.adGuidanceSlider.addEventListener("input", (e) => {
+      elements.adGuidanceVal.textContent = Number(e.target.value).toFixed(1);
+    });
+  }
+
+  // Video engine toggle (AnimateDiff vs SVD)
+  if (elements.btnEngineAnimateDiff && elements.btnEngineSvd) {
+    elements.btnEngineAnimateDiff.addEventListener("click", () => setVideoEngine("animatediff"));
+    elements.btnEngineSvd.addEventListener("click", () => setVideoEngine("svd"));
+  }
 
   // Video slider synchronization
   elements.motionSlider.addEventListener("input", (e) => {
@@ -588,17 +630,117 @@ function displayGeneratedImage(data) {
   elements.metaStrip.style.display = "flex";
 }
 
+function setVideoEngine(engine) {
+  activeVideoEngine = engine;
+  if (engine === "animatediff") {
+    elements.btnEngineAnimateDiff.classList.add("active");
+    elements.btnEngineSvd.classList.remove("active");
+    elements.videoEngineBadge.textContent = "⚡ AnimateDiff (15s Native)";
+    elements.videoEngineDesc.innerHTML = "<strong>AnimateDiff v1.5:</strong> Fits 100% inside 8GB VRAM natively. Synthesizes a 16-frame looping video in <strong>~12 to 18 seconds</strong> on your RTX 4070.";
+    elements.animatediffInputsCard.style.display = "block";
+    elements.svdInputsContainer.style.display = "none";
+    elements.generateVideoBtnText.textContent = "⚡ Generate Fast Video (AnimateDiff)";
+  } else {
+    elements.btnEngineSvd.classList.add("active");
+    elements.btnEngineAnimateDiff.classList.remove("active");
+    elements.videoEngineBadge.textContent = "🎬 SVD-XT (Image-to-Video)";
+    elements.videoEngineDesc.innerHTML = "<strong>Stable Video Diffusion XT:</strong> Transforms any still image into a smooth 1024x576 video with 3D camera pan and lighting (~2 min render).";
+    elements.animatediffInputsCard.style.display = "none";
+    elements.svdInputsContainer.style.display = "block";
+    elements.generateVideoBtnText.textContent = "🎬 Animate Image to MP4 (SVD)";
+  }
+}
+
 // ============================================================================
-// Video Generation (Stable Video Diffusion)
+// Video Generation (AnimateDiff & Stable Video Diffusion)
 // ============================================================================
 async function handleGenerateVideo() {
+  if (isGenerating || isGeneratingVideo || isSwitchingModel) return;
+
+  // 1. AnimateDiff Execution (Text-to-Video Loop / ~15s)
+  if (activeVideoEngine === "animatediff") {
+    const prompt = elements.adPromptInput.value.trim() || elements.promptInput.value.trim();
+    if (!prompt) {
+      showToast("Please enter an animation text prompt for AnimateDiff.", "error");
+      elements.adPromptInput.focus();
+      return;
+    }
+
+    isGeneratingVideo = true;
+    elements.generateVideoBtn.disabled = true;
+    elements.videoSpinner.style.display = "inline-block";
+    elements.generateVideoBtnText.textContent = "Synthesizing Loop...";
+    setVideoStatus("busy", "Rendering 16 frames on RTX 4070 (~15s)...");
+
+    elements.placeholderState.style.display = "none";
+    elements.mainPreviewImg.style.display = "none";
+    elements.mainPreviewVideo.style.display = "none";
+    elements.mainPreviewVideo.pause();
+    elements.loadingState.style.display = "block";
+    elements.loadingTitle.textContent = "Rendering 100% Native Video Loop...";
+    elements.loadingDetail.textContent = "Running 16 frames on RTX 4070 (Estimated time: ~15 seconds)";
+    elements.previewActions.style.display = "none";
+    elements.metaStrip.style.display = "none";
+
+    const startTime = Date.now();
+    elements.elapsedCounter.textContent = "0.0s";
+    videoTimerInterval = setInterval(() => {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      elements.elapsedCounter.textContent = `${elapsed}s`;
+      elements.videoTimerText.textContent = `${elapsed}s`;
+    }, 100);
+
+    const payload = {
+      prompt: prompt,
+      negative_prompt: elements.adNegPromptInput.value.trim(),
+      num_frames: 16,
+      fps: 8,
+      num_inference_steps: parseInt(elements.adStepsSlider.value, 10),
+      guidance_scale: parseFloat(elements.adGuidanceSlider.value),
+      seed: -1,
+    };
+
+    try {
+      const res = await fetch("/api/v1/generate-animatediff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "AnimateDiff generation failed");
+
+      displayGeneratedVideo(data);
+      addToGallery({
+        url: data.video_url,
+        filename: data.filename,
+        media_type: "video",
+      });
+      notifyCompletion(data, "video");
+      setVideoStatus("ready", `Generated in ${data.generation_time_seconds}s (16 frames @ ${data.fps}fps)`);
+      showToast("AnimateDiff video loop rendered in " + data.generation_time_seconds + "s!", "success");
+    } catch (err) {
+      setVideoStatus("error", `Animation failed: ${err.message}`);
+      showToast(err.message, "error");
+      elements.loadingState.style.display = "none";
+      elements.placeholderState.style.display = "block";
+    } finally {
+      clearInterval(videoTimerInterval);
+      isGeneratingVideo = false;
+      elements.generateVideoBtn.disabled = false;
+      elements.videoSpinner.style.display = "none";
+      elements.generateVideoBtnText.textContent = "⚡ Generate Fast Video (AnimateDiff)";
+      fetchHealth();
+    }
+    return;
+  }
+
+  // 2. Stable Video Diffusion (SVD Image-to-Video)
   const sourceFilename = elements.selectedSourceFilename.value || activeSourceImageFilename;
   if (!sourceFilename) {
     showToast("Please generate or select a source image from the gallery first.", "error");
     return;
   }
-
-  if (isGenerating || isGeneratingVideo || isSwitchingModel) return;
 
   isGeneratingVideo = true;
   elements.generateVideoBtn.disabled = true;
@@ -668,7 +810,7 @@ async function handleGenerateVideo() {
     isGeneratingVideo = false;
     elements.generateVideoBtn.disabled = false;
     elements.videoSpinner.style.display = "none";
-    elements.generateVideoBtnText.textContent = "🎬 Animate Image to MP4";
+    elements.generateVideoBtnText.textContent = "🎬 Animate Image to MP4 (SVD)";
     fetchHealth();
   }
 }
@@ -692,10 +834,10 @@ function displayGeneratedVideo(data) {
   elements.previewActions.style.display = "flex";
 
   // Metadata strip
-  elements.metaModel.textContent = "SVD-XT (Video)";
+  elements.metaModel.textContent = data.engine === "animatediff" ? "AnimateDiff v1.5 (Native)" : "SVD-XT (Video)";
   elements.metaRes.textContent = `${data.num_frames} frames @ ${data.fps}fps`;
-  elements.metaSteps.textContent = `Motion: ${data.motion_bucket_id}`;
-  elements.metaCfg.textContent = "--";
+  elements.metaSteps.textContent = data.num_inference_steps ? `Steps: ${data.num_inference_steps}` : `Motion: ${data.motion_bucket_id}`;
+  elements.metaCfg.textContent = data.guidance_scale || "--";
   elements.metaSeed.textContent = data.seed;
   elements.metaTime.textContent = `${data.generation_time_seconds}s`;
   elements.metaStrip.style.display = "flex";

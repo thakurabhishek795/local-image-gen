@@ -160,89 +160,126 @@
       </div>
     </section>
 
-    <!-- Video Controls Panel (SVD Image-to-Video) -->
+    <!-- Video Controls Panel (AnimateDiff & SVD) -->
     <section class="controls-panel" id="video-controls-panel" style="display: none;">
-      <!-- Video Model Info Card -->
+      <!-- Video Model Engine Selector Card -->
       <div class="card model-card">
         <div class="card-header">
-          <span class="section-title">Video Generator Engine</span>
-          <span class="badge badge-accent">SVD-XT (Image-to-Video)</span>
+          <span class="section-title">Video Model Engine</span>
+          <span class="badge badge-accent" id="video-engine-badge">⚡ AnimateDiff (15s Native)</span>
         </div>
-        <p class="model-desc">
-          <strong>Stable Video Diffusion XT</strong> &bull; Transforms any still image into a smooth, dynamic MP4 video with realistic 3D camera pan, motion, and lighting.
+        <div class="preset-pill-group" id="video-engine-pills">
+          <button type="button" class="preset-pill active" id="btn-engine-animatediff" data-engine="animatediff">⚡ AnimateDiff (Fast 15s Native)</button>
+          <button type="button" class="preset-pill" id="btn-engine-svd" data-engine="svd">🎬 SVD-XT (Image-to-Video)</button>
+        </div>
+        <p class="model-desc" id="video-engine-desc">
+          <strong>AnimateDiff v1.5:</strong> Fits 100% inside 8GB VRAM natively. Synthesizes a 16-frame looping video in <strong>~12 to 18 seconds</strong> on your RTX 4070.
         </p>
       </div>
 
-      <!-- Selected Source Image Card -->
-      <div class="card source-image-card">
-        <div class="card-header">
-          <span class="section-title">Source Image</span>
-          <span class="badge" id="source-image-status">Active Canvas</span>
+      <!-- AnimateDiff Inputs Card -->
+      <div class="card prompt-card" id="animatediff-inputs-card">
+        <div class="form-group">
+          <div class="label-row">
+            <label for="ad-prompt-input" class="section-title">Animation Text Prompt</label>
+            <span class="char-count" id="ad-prompt-count">0 chars</span>
+          </div>
+          <textarea id="ad-prompt-input" class="custom-textarea" rows="3" placeholder="An astronaut riding a galloping neon horse across Mars, cosmic nebulae in sky, cinematic 4k, fluid motion..."></textarea>
         </div>
-        <div class="source-image-preview-box">
-          <img id="source-image-thumb" src="" alt="Source preview" style="display: none;">
-          <div id="no-source-image-msg" class="no-source-msg">
-            <span>📷 No image selected.</span>
-            <small>Generate an image or click any thumbnail in the gallery.</small>
+
+        <div class="form-group">
+          <div class="label-row">
+            <label for="ad-neg-prompt-input" class="section-title">Negative Prompt</label>
+            <span class="info-tag">Smoothness filter</span>
+          </div>
+          <textarea id="ad-neg-prompt-input" class="custom-textarea" rows="2" placeholder="static, jerky motion, deformed limbs, blurry, distorted, watermark, low quality"></textarea>
+        </div>
+
+        <div class="form-group">
+          <div class="slider-header">
+            <label for="ad-steps-slider" class="param-label">Inference Steps</label>
+            <span class="slider-value" id="ad-steps-val">25</span>
+          </div>
+          <input type="range" id="ad-steps-slider" min="15" max="40" value="25" class="custom-slider">
+          <div class="slider-hints">
+            <span>15 (Ultra-fast ~10s)</span>
+            <span>25 (Balanced ~15s)</span>
+            <span>35 (Detailed ~20s)</span>
           </div>
         </div>
-        <input type="hidden" id="selected-source-filename" value="">
+
+        <div class="form-group">
+          <div class="slider-header">
+            <label for="ad-guidance-slider" class="param-label">Guidance Scale (CFG)</label>
+            <span class="slider-value" id="ad-guidance-val">7.5</span>
+          </div>
+          <input type="range" id="ad-guidance-slider" min="1.0" max="15.0" step="0.5" value="7.5" class="custom-slider">
+        </div>
       </div>
 
-      <!-- Video Parameters Card -->
-      <div class="card parameters-card">
-        <div class="card-header">
-          <span class="section-title">Motion & Video Parameters</span>
+      <!-- SVD Image-to-Video Container (Hidden when AnimateDiff is active) -->
+      <div id="svd-inputs-container" style="display: none;">
+        <!-- Selected Source Image Card -->
+        <div class="card source-image-card">
+          <div class="card-header">
+            <span class="section-title">Source Image</span>
+            <span class="badge" id="source-image-status">Active Canvas</span>
+          </div>
+          <div class="source-image-preview-box">
+            <img id="source-image-thumb" src="" alt="Source preview" style="display: none;">
+            <div id="no-source-image-msg" class="no-source-msg">
+              <span>📷 No image selected.</span>
+              <small>Generate an image or click any thumbnail in the gallery.</small>
+            </div>
+          </div>
+          <input type="hidden" id="selected-source-filename" value="">
         </div>
 
-        <!-- Motion Bucket ID -->
-        <div class="form-group">
-          <div class="slider-header">
-            <label for="motion-slider" class="param-label">Motion Intensity (Bucket ID)</label>
-            <span class="slider-value" id="motion-val">127</span>
+        <!-- SVD Parameters Card -->
+        <div class="card parameters-card">
+          <div class="card-header">
+            <span class="section-title">SVD Motion Parameters</span>
           </div>
-          <input type="range" id="motion-slider" min="1" max="255" value="127" class="custom-slider">
-          <div class="slider-hints">
-            <span>1 (Subtle float)</span>
-            <span>127 (Natural pan)</span>
-            <span>255 (High energy)</span>
-          </div>
-        </div>
 
-        <!-- Frame Count Selector -->
-        <div class="form-group">
-          <label class="param-label">Video Length (Frames)</label>
-          <div class="preset-pill-group" id="video-frames-group">
-            <button type="button" class="preset-pill active" data-frames="14">14 Frames (1024px HD / ~2 min)</button>
-            <button type="button" class="preset-pill" data-frames="25">25 Frames (Extended / ~3-4 min)</button>
+          <!-- Motion Bucket ID -->
+          <div class="form-group">
+            <div class="slider-header">
+              <label for="motion-slider" class="param-label">Motion Intensity (Bucket ID)</label>
+              <span class="slider-value" id="motion-val">127</span>
+            </div>
+            <input type="range" id="motion-slider" min="1" max="255" value="127" class="custom-slider">
+            <div class="slider-hints">
+              <span>1 (Subtle float)</span>
+              <span>127 (Natural pan)</span>
+              <span>255 (High energy)</span>
+            </div>
           </div>
-        </div>
 
-        <!-- FPS Slider -->
-        <div class="form-group">
-          <div class="slider-header">
-            <label for="fps-slider" class="param-label">Playback Frame Rate (FPS)</label>
-            <span class="slider-value" id="fps-val">7</span>
+          <!-- Frame Count Selector -->
+          <div class="form-group">
+            <label class="param-label">Video Length (Frames)</label>
+            <div class="preset-pill-group" id="video-frames-group">
+              <button type="button" class="preset-pill active" data-frames="14">14 Frames (1024px HD / ~2 min)</button>
+              <button type="button" class="preset-pill" data-frames="25">25 Frames (Extended / ~3-4 min)</button>
+            </div>
           </div>
-          <input type="range" id="fps-slider" min="4" max="16" value="7" class="custom-slider">
-          <div class="slider-hints">
-            <span>5 (Dreamy)</span>
-            <span>7 (Standard SVD)</span>
-            <span>12 (Smooth)</span>
-          </div>
-        </div>
 
-        <!-- Noise Augmentation Slider -->
-        <div class="form-group">
-          <div class="slider-header">
-            <label for="noise-aug-slider" class="param-label">Motion Noise Augmentation</label>
-            <span class="slider-value" id="noise-aug-val">0.02</span>
+          <!-- FPS Slider -->
+          <div class="form-group">
+            <div class="slider-header">
+              <label for="fps-slider" class="param-label">Playback Frame Rate (FPS)</label>
+              <span class="slider-value" id="fps-val">7</span>
+            </div>
+            <input type="range" id="fps-slider" min="4" max="16" value="7" class="custom-slider">
           </div>
-          <input type="range" id="noise-aug-slider" min="0.00" max="0.10" step="0.01" value="0.02" class="custom-slider">
-          <div class="slider-hints">
-            <span>0.00 (Minimal)</span>
-            <span>0.02 (Optimal)</span>
-            <span>0.08 (Extreme)</span>
+
+          <!-- Noise Augmentation Slider -->
+          <div class="form-group">
+            <div class="slider-header">
+              <label for="noise-aug-slider" class="param-label">Motion Noise Augmentation</label>
+              <span class="slider-value" id="noise-aug-val">0.02</span>
+            </div>
+            <input type="range" id="noise-aug-slider" min="0.00" max="0.10" step="0.01" value="0.02" class="custom-slider">
           </div>
         </div>
       </div>
@@ -251,7 +288,7 @@
       <div class="action-section">
         <button id="generate-video-btn" class="btn btn-accent btn-generate">
           <span class="btn-icon-spin" id="video-spinner" style="display: none;">⏳</span>
-          <span id="generate-video-btn-text">🎬 Animate Image to MP4</span>
+          <span id="generate-video-btn-text">⚡ Generate Fast Video (AnimateDiff)</span>
         </button>
         <div class="status-bar" id="video-status-bar">
           <div class="status-indicator ready" id="video-status-dot"></div>
