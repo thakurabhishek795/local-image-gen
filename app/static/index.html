@@ -341,6 +341,57 @@
     </section>
   </main>
 
+  <!-- Remote Access & Server Modal -->
+  <div class="modal-overlay" id="remote-modal" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <span class="modal-icon">🌐</span>
+          <h3>Remote Server Access</h3>
+        </div>
+        <button type="button" class="btn-close" id="close-remote-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-intro">Your studio is hosted on <code>0.0.0.0:7860</code> and can be controlled remotely from your phone, tablet, or another computer.</p>
+
+        <!-- Tailscale Section -->
+        <div class="remote-option-card">
+          <div class="remote-option-header">
+            <span class="remote-tag tailscale">Tailscale Mesh (Global Private Access)</span>
+            <span class="status-indicator ready"></span>
+          </div>
+          <p class="remote-sub">Encrypted access from anywhere in the world on any device in your Tailnet.</p>
+          <div class="url-copy-box">
+            <input type="text" id="modal-tailscale-url" readonly value="Detecting...">
+            <button type="button" class="btn btn-secondary btn-sm" id="copy-tailscale-btn">Copy</button>
+          </div>
+        </div>
+
+        <!-- Local Network Section -->
+        <div class="remote-option-card">
+          <div class="remote-option-header">
+            <span class="remote-tag lan">Home Wi-Fi (Local LAN)</span>
+          </div>
+          <p class="remote-sub">Direct access from phones or PCs connected to the same Wi-Fi router.</p>
+          <div class="url-copy-box">
+            <input type="text" id="modal-lan-url" readonly value="Detecting...">
+            <button type="button" class="btn btn-secondary btn-sm" id="copy-lan-btn">Copy</button>
+          </div>
+        </div>
+
+        <!-- Server Tools Tip -->
+        <div class="remote-tips-box">
+          <strong>🛠 Server Setup & Background Mode:</strong>
+          <ul>
+            <li>Run <code>open_firewall.bat</code> once to permit inbound connections in Windows Firewall.</li>
+            <li>Run <code>start_server_background.vbs</code> to run the server quietly without a console window.</li>
+            <li>Run <code>setup_autostart.bat</code> to launch this server automatically when Windows starts.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Notification Toast Container -->
   <div id="toast-container" class="toast-container"></div>
 

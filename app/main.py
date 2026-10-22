@@ -5,6 +5,7 @@ main.py - FastAPI application endpoints, dynamic routing, and lifecycle events.
 import argparse
 import logging
 import os
+import socket
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -141,6 +142,53 @@ async def health_check():
         "ram": mem_info.get("ram"),
         "engine": engine_status,
         "active_model": active_meta,
+    }
+
+
+@app.get("/api/v1/network")
+async def get_network_info():
+    """
+    Returns detected network addresses (Tailscale IP, LAN Wi-Fi IP, and URLs)
+    for easy remote access configuration and mobile pairing.
+    """
+    tailscale_ip = None
+    local_ip = None
+    hostname = socket.gethostname()
+
+    try:
+        import psutil
+        addrs = psutil.net_if_addrs()
+        for iface, addr_list in addrs.items():
+            for addr in addr_list:
+                if addr.family == socket.AF_INET:
+                    ip = addr.address
+                    if ip.startswith("127.") or ip.startswith("169.254."):
+                        continue
+                    if "tailscale" in iface.lower() or ip.startswith("100."):
+                        tailscale_ip = ip
+                    elif not local_ip:
+                        local_ip = ip
+    except Exception as e:
+        logger.debug(f"Network discovery error: {e}")
+
+    # Fallback for local IP
+    if not local_ip:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            local_ip = "127.0.0.1"
+
+    port = settings.PORT
+    return {
+        "hostname": hostname,
+        "tailscale_ip": tailscale_ip,
+        "tailscale_url": f"http://{tailscale_ip}:{port}" if tailscale_ip else None,
+        "local_ip": local_ip,
+        "local_url": f"http://{local_ip}:{port}" if local_ip else f"http://localhost:{port}",
+        "port": port,
     }
 
 

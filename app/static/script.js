@@ -115,6 +115,16 @@ const elements = {
   galleryGrid: document.getElementById("gallery-grid"),
   galleryCount: document.getElementById("gallery-count"),
   toastContainer: document.getElementById("toast-container"),
+
+  // Remote Access Modal
+  remotePill: document.getElementById("remote-pill"),
+  remoteText: document.getElementById("remote-text"),
+  remoteModal: document.getElementById("remote-modal"),
+  closeRemoteModal: document.getElementById("close-remote-modal"),
+  modalTailscaleUrl: document.getElementById("modal-tailscale-url"),
+  modalLanUrl: document.getElementById("modal-lan-url"),
+  copyTailscaleBtn: document.getElementById("copy-tailscale-btn"),
+  copyLanBtn: document.getElementById("copy-lan-btn"),
 };
 
 // ============================================================================
@@ -124,6 +134,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupEventListeners();
   fetchModels();
   fetchHealth();
+  fetchNetworkInfo();
   fetchRecentImages();
 
   // Poll hardware status every 6 seconds
@@ -226,6 +237,61 @@ function setupEventListeners() {
 
   // Copy parameters
   elements.copyParamsBtn.addEventListener("click", copyGenerationParams);
+
+  // Remote Access Modal listeners
+  elements.remotePill.addEventListener("click", () => {
+    elements.remoteModal.style.display = "flex";
+  });
+  elements.closeRemoteModal.addEventListener("click", () => {
+    elements.remoteModal.style.display = "none";
+  });
+  elements.remoteModal.addEventListener("click", (e) => {
+    if (e.target === elements.remoteModal) {
+      elements.remoteModal.style.display = "none";
+    }
+  });
+
+  elements.copyTailscaleBtn.addEventListener("click", () => {
+    const url = elements.modalTailscaleUrl.value;
+    if (url && !url.includes("not detected")) {
+      navigator.clipboard.writeText(url).then(() => {
+        showToast("Tailscale URL copied! Open this on any Tailnet device.", "success");
+      });
+    }
+  });
+
+  elements.copyLanBtn.addEventListener("click", () => {
+    const url = elements.modalLanUrl.value;
+    if (url) {
+      navigator.clipboard.writeText(url).then(() => {
+        showToast("Home Wi-Fi URL copied! Open on any device on your Wi-Fi.", "success");
+      });
+    }
+  });
+}
+
+async function fetchNetworkInfo() {
+  try {
+    const res = await fetch("/api/v1/network");
+    if (!res.ok) return;
+    const data = await res.json();
+
+    if (data.tailscale_url) {
+      elements.modalTailscaleUrl.value = data.tailscale_url;
+      elements.remoteText.textContent = "Tailscale: " + data.tailscale_ip;
+    } else {
+      elements.modalTailscaleUrl.value = "Tailscale not detected on server";
+    }
+
+    if (data.local_url) {
+      elements.modalLanUrl.value = data.local_url;
+      if (!data.tailscale_url) {
+        elements.remoteText.textContent = "Wi-Fi: " + data.local_ip;
+      }
+    }
+  } catch (e) {
+    // Silent fail
+  }
 }
 
 // ============================================================================

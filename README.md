@@ -242,25 +242,43 @@ curl -X POST http://localhost:7860/api/v1/generate-video \
   }'
 ```
 
-### 6. `GET /api/v1/images`
+### 6. `GET /api/v1/network`
+Returns detected Tailscale IP, LAN Wi-Fi IP, and direct connection URLs for mobile pairing.
+
+### 7. `GET /api/v1/images`
 Returns a list of recently generated output files (both images and MP4 videos) with metadata.
 
 ---
 
-## 🌐 Remote Access via Tailscale
+## 🖥️ Server Deployment & Background Daemon Utilities
+
+The repository includes tools to turn your computer into a **24/7 dedicated background server**:
+
+* **`open_firewall.bat`**: One-click script (auto-elevates to Administrator) to add an Inbound Rule in Windows Defender Firewall for TCP Port 7860.
+* **`start_server_background.vbs`**: Silent launcher that starts the FastAPI image generation service in the background **without keeping a visible console window open**.
+* **`stop_server.bat`**: Gracefully terminates any background server process running on port 7860.
+* **`setup_autostart.bat`**: Adds or removes an auto-start shortcut in Windows Startup (`shell:startup`) so your image server starts automatically every time your PC boots up.
+
+---
+
+## 🌐 Remote Access via Tailscale & Local Wi-Fi
 
 Because the server binds to `0.0.0.0:7860`, it is instantly accessible across your **Tailscale** private mesh network without opening router ports or exposing your IP.
+
+### Quick URLs (Click the 🌐 badge in the Web Studio header to copy):
+* **Tailscale (Global Access from Any Phone/Laptop):** `http://<your-tailscale-ip>:7860`
+* **Local Network (Home Wi-Fi):** `http://<your-local-ip>:7860`
 
 ### Option A: Direct Tailscale IP Access (Quickest)
 1. Install Tailscale on your host machine and mobile device/laptop: [tailscale.com/download](https://tailscale.com/download).
 2. Find your host machine's Tailscale IP:
    ```bash
    tailscale ip -4
-   # Output example: 100.82.140.23
+   # Output example: 100.100.233.81
    ```
 3. Open a browser on any connected Tailscale device and navigate to:
    ```text
-   http://100.82.140.23:7860
+   http://100.100.233.81:7860
    ```
 
 ### Option B: Tailscale Serve with MagicDNS & HTTPS (Recommended)
