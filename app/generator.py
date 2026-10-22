@@ -545,8 +545,8 @@ class ModelManager:
             logger.info("Placing AnimateDiff directly on GPU (no CPU offload)...")
             self.animatediff_pipeline.to(self.device)
 
-            if hasattr(self.animatediff_pipeline, "enable_vae_slicing"):
-                self.animatediff_pipeline.enable_vae_slicing()
+            if hasattr(self.animatediff_pipeline, "vae") and hasattr(self.animatediff_pipeline.vae, "enable_slicing"):
+                self.animatediff_pipeline.vae.enable_slicing()
 
             logger.info("AnimateDiff loaded successfully (100% Native VRAM).")
         except Exception as e:
@@ -591,6 +591,7 @@ class ModelManager:
                 guidance_scale=guidance_scale,
                 num_inference_steps=num_inference_steps,
                 generator=generator,
+                decode_chunk_size=2,
             )
             frames = output.frames[0]
             elapsed_seconds = round(time.perf_counter() - start_time, 2)
